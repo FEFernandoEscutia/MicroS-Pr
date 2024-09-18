@@ -27,7 +27,9 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
 
   async findAll(paginationDto: PaginationDto) {
     const { page, limit } = paginationDto;
-    const totalPages = await this.product.count({});
+    const totalPages = await this.product.count({
+      where: { isAvailable: true },
+    });
     const lastPage = Math.ceil(totalPages / limit);
 
     if (page > lastPage) {
@@ -40,6 +42,9 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
       data: await this.product.findMany({
         skip: (page - 1) * limit,
         take: limit,
+        where: {
+          isAvailable: true,
+        },
       }),
       metaData: {
         page: page,
@@ -53,15 +58,20 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
     const productDb = await this.product.findUnique({
       where: {
         id,
+        isAvailable: true,
       },
     });
     if (!productDb) {
-      throw new NotFoundException('The product does not exist');
+      throw new NotFoundException(
+        'The product does not exist or its not available',
+      );
     }
     return productDb;
   }
 
   async update(id: string, updateProductDto: UpdateProductDto) {
+    const { id: __, ...data } = updateProductDto;
+
     const dbProduct = await this.findOne(id);
     if (!dbProduct) {
       throw new NotFoundException('The product does not exist');
@@ -70,19 +80,16 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
       where: {
         id: dbProduct.id,
       },
-      data: updateProductDto,
+      data: data,
     });
   }
 
   // soft delete
   async remove(id: string) {
     const dbProduct = await this.findOne(id);
-    if (dbProduct.isAvailable === false) {
-      throw new ConflictException('The Product is already unavailable ');
-    }
     return await this.product.update({
       where: {
-        id: (await dbProduct).id,
+        id: dbProduct.id,
       },
       data: {
         isAvailable: false,
